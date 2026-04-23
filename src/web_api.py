@@ -905,8 +905,12 @@ window.sendMsg=sendMsg;
 // ── 风险确认 ──────────────────────────────────────────────────────────────
 window.doConfirm=async function(ok){
   if(!pendingState)return;
-  document.getElementById('btnOk').disabled=true;
-  document.getElementById('btnNo').disabled=true;
+  // 立即清空 pendingState 并永久禁用按钮，防止任何二次点击
+  pendingState=null;
+  var okBtn=document.getElementById('btnOk');
+  var noBtn=document.getElementById('btnNo');
+  if(okBtn){okBtn.disabled=true;okBtn.style.opacity='0.3';okBtn.style.cursor='not-allowed';okBtn.onclick=null;}
+  if(noBtn){noBtn.disabled=true;noBtn.style.opacity='0.3';noBtn.style.cursor='not-allowed';noBtn.onclick=null;}
 
   addThinking();
   try{
@@ -924,10 +928,8 @@ window.doConfirm=async function(ok){
   }catch(e){
     rmThinking();
     addAiBubble('❌ 处理确认时出错：'+e.message);
-    var ok2=document.getElementById('btnOk');var no2=document.getElementById('btnNo');
-    if(ok2)ok2.disabled=false;if(no2)no2.disabled=false;
+    // 即使出错也不恢复按钮——操作已被提交，重复提交有风险
   }
-  pendingState=null;
 };
 
 function ftTimeout(url,opts,ms){
@@ -1033,7 +1035,7 @@ function renderEnv(d){
   if(!saved)saveSes(sesId,{title:'新对话',lastAt:Date.now()/1000});
   await loadSessions();
   loadEnv();
-  setInterval(loadEnv,30000);  // 每30秒自动刷新
+  setInterval(loadEnv,300000);  // 每5分钟自动刷新
   document.getElementById('inp').focus();
 })();
 
