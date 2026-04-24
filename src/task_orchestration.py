@@ -98,7 +98,7 @@ def build_specialized_task_sequence(user_input: str, os_type: str = "linux") -> 
                 "is_critical": True,
                 "can_rollback": False,
                 "post_validation": {
-                    "validation_command": f"id {username}",
+                    "validation_command": f"if id {username} >/dev/null 2>&1; then exit 1; fi" + (f"; if [ -d /home/{username} ]; then exit 1; fi" if remove_home else ""),
                     "expected_result": "",
                     "failure_action": "abort",
                 },

@@ -31,6 +31,7 @@ from tools.audit_logger import AuditLogger
 from tools.task_decomposer import LLMTaskDecomposer
 from tools.explainability import ExplainabilityEngine
 from tools.execution_verifier import ExecutionVerifier
+from src.safety_rules import matches_high_risk_intent
 from src.state_manager import (
     AgentState,
     StateValidator,
@@ -585,6 +586,49 @@ def detect_environment(state: AgentState) -> Dict[str, Any]:
 
 def identify_intent(state: AgentState) -> Dict[str, Any]:
     user_input = state["user_input"]
+    is_high_risk, matched_pattern = matches_high_risk_intent(user_input)
+    if is_high_risk:
+        pattern = matched_pattern
+        task_id = f"task_{int(time.time())}_reject"
+        task_dict = {
+            "intent": "reject_high_risk",
+            "description": "拒绝执行高危操作",
+            "parameters": {},
+            "command": None,
+            "status": "failed",
+            "result": f"安全拦截：检测到高危指令 '{pattern}'，由于预设的安全策略，该请求已被直接拒绝。",
+            "retries": 0,
+            "risk_info": None,
+            "task_id": task_id,
+            "depends_on": [],
+            "branch_type": "sequential",
+            "condition": None,
+            "on_true": None,
+            "on_false": None,
+            "pre_check": None,
+            "post_validation": None,
+            "error_strategy": "abort",
+            "is_critical": True,
+            "rollback_action": None,
+            "can_rollback": False
+        }
+        return {
+            "task_sequence": [task_dict],
+            "current_task_index": 0,
+            "task_status": "failed",
+            "execution_result": "高危命令已被硬编码规则直接拦截",
+            "approval_active": False,
+            "conversation_history": state.get("conversation_history", []) + [{"role": "user", "content": user_input}],
+            "execution_log": [{"timestamp": time.time(), "action": "intent_parsing", "status": "failed", "details": f"检测到高危指令: {pattern}"}],
+            "task_outputs": {},
+            "branch_results": {},
+            "task_execution_order": [task_id],
+            "rollback_stack": [],
+            "resolved_parameters": {},
+            "intent": "reject_high_risk",
+            "last_intent": "reject_high_risk",
+            "consistency_issues": []
+        }
     history = state.get("conversation_history", [])
     env = state.get("environment", {})
     os_type = env.get("os_type", "linux")
@@ -930,7 +974,7 @@ def generate_command(state: AgentState) -> Dict[str, Any]:
         else:
             command = f"userdel {_safe_arg(username, os_type)}"
             if params.get("remove_home"):
-                command = f"userdel -r {_safe_arg(username, os_type)}"
+                command = f"userdel -r {_safe_arg(username, os_type)} ; rm -rf /home/{_safe_arg(username, os_type)}"
     elif intent == "set_login_shell":
         username = params.get("username", "")
         shell = params.get("shell", "/sbin/nologin")
@@ -1214,6 +1258,9 @@ def execute_command(state: AgentState) -> Dict[str, Any]:
                     elif val_failure_action == "skip":
                         result_text += f"\n后验证失败，但标记为跳过\n"
                         task_status = "completed"
+                    else:
+                        result_text += f"\n后验证失败，操作不符合预期\n"
+                        task_status = "failed"
             except Exception as e:
                 result_text += f"\n后验证执行错误: {str(e)}\n"
 
