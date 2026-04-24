@@ -10,6 +10,7 @@ class TaskStatus(str, Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
+    BLOCKED = "blocked"
     CANCELLED = "cancelled"
     SKIPPED = "skipped"
     ROLLED_BACK = "rolled_back"
@@ -242,6 +243,9 @@ class AgentState(TypedDict, total=False):
     rollback_stack: List[Dict[str, Any]]
     branch_results: Dict[str, Any]
     task_execution_order: List[str]
+    task_outputs: Dict[str, Dict[str, Any]]
+    resolved_parameters: Dict[str, Any]
+    approval_active: bool
 
     explanation: str
     last_intent: str
@@ -299,6 +303,19 @@ class StateValidator:
         if "task_execution_order" not in validated:
             validated["task_execution_order"] = []
 
+        if "task_outputs" not in validated:
+            validated["task_outputs"] = {}
+        elif not isinstance(validated["task_outputs"], dict):
+            validated["task_outputs"] = {}
+
+        if "resolved_parameters" not in validated:
+            validated["resolved_parameters"] = {}
+        elif not isinstance(validated["resolved_parameters"], dict):
+            validated["resolved_parameters"] = {}
+
+        if "approval_active" not in validated:
+            validated["approval_active"] = False
+
         if "explanation" not in validated:
             validated["explanation"] = ""
 
@@ -325,7 +342,7 @@ class StateValidator:
     @staticmethod
     def validate_task_status(status: str) -> bool:
         valid_statuses = {
-            "pending", "in_progress", "completed", "failed",
+            "pending", "in_progress", "completed", "failed", "blocked",
             "cancelled", "skipped", "rolled_back"
         }
         return status in valid_statuses

@@ -2,7 +2,6 @@ import importlib
 import os
 import sys
 import unittest
-from unittest import mock
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -23,9 +22,6 @@ class TestSecurityTools(unittest.TestCase):
 
     def test_low_risk_command_allowed(self):
         self.assertFalse(self.security_tools.should_block_command("df -h", "linux"))
-
-    def test_critical_directory_delete_is_blocked(self):
-        self.assertTrue(self.security_tools.should_block_command("rm -rf /etc", "linux"))
 
     def test_delete_operation_requires_confirmation(self):
         risk_level = self.security_tools.assess_risk_level(
@@ -188,43 +184,6 @@ class TestWorkflow(unittest.TestCase):
         agent_workflow = importlib.import_module("src.agent_workflow")
         intent = agent_workflow._extract_single_intent("排查80端口无法访问")
         self.assertEqual(intent["intent"], "diagnostic")
-
-
-    def test_delete_path_intent_detected_for_etc(self):
-        agent_workflow = importlib.import_module("src.agent_workflow")
-        intent = agent_workflow._extract_single_intent("强制删除/etc目录")
-        self.assertEqual(intent["intent"], "delete_path")
-        self.assertEqual(intent["parameters"]["path"], "/etc")
-
-    def test_execute_command_marks_verified_partial_create_as_completed(self):
-        agent_workflow = importlib.import_module("src.agent_workflow")
-        state = {
-            "command": "useradd -m dev_test",
-            "environment": {"os_type": "linux"},
-            "task_sequence": [{"intent": "create_user", "task_id": "task_create_user", "parameters": {"username": "dev_test"}}],
-            "current_task_index": 0,
-            "rollback_stack": [],
-            "execution_log": [],
-            "task_outputs": {},
-            "resolved_parameters": {"username": "dev_test"},
-            "session_id": "test_partial_create",
-            "risk_assessment": {},
-        }
-
-        verify_result = type("VerifyRes", (), {"passed": True, "message": "verified"})()
-
-        with mock.patch.object(
-            agent_workflow.SystemTools,
-            "_run_command",
-            return_value={"exit_code": 1, "stdout": "", "stderr": "useradd: user 'dev_test' already exists"},
-        ), mock.patch.object(
-            agent_workflow.ExecutionVerifier,
-            "verify",
-            return_value=verify_result,
-        ):
-            result = agent_workflow.execute_command(state)
-
-        self.assertEqual(result["task_sequence"][0]["status"], "completed")
 
 
 if __name__ == "__main__":

@@ -326,29 +326,6 @@ def _extract_single_intent(text: str) -> Dict[str, Any]:
     """新的 goal-oriented 意图识别：理解用户目标，推导最佳命令"""
     text_lower = text.lower()
 
-    create_user_match = re.search(
-        r"(?:\u521b\u5efa|\u65b0\u5efa|create|add)\s*(?:\u666e\u901a)?\s*(?:\u7528\u6237|user)\s*([A-Za-z_][A-Za-z0-9_-]{0,31})(?![A-Za-z0-9_-])",
-        text,
-        re.IGNORECASE,
-    )
-    if create_user_match:
-        return {"intent": "create_user", "parameters": {"username": create_user_match.group(1)}}
-
-    delete_user_match = re.search(
-        r"(?:\u5220\u9664|\u79fb\u9664|delete|remove).*?(?:\u7528\u6237|user)\s*([A-Za-z_][A-Za-z0-9_-]{0,31})(?![A-Za-z0-9_-])",
-        text,
-        re.IGNORECASE,
-    )
-    if delete_user_match:
-        return {"intent": "delete_user", "parameters": {"username": delete_user_match.group(1)}}
-
-    delete_path_match = re.search(r"(/[A-Za-z0-9_./-]+)(?![A-Za-z0-9_./-])", text)
-    if delete_path_match and any(keyword in text_lower for keyword in ["删除", "移除", "remove", "delete", "rm"]):
-        return {
-            "intent": "delete_path",
-            "parameters": {"path": delete_path_match.group(1), "recursive": True},
-        }
-
     # ── 内存相关目标 ──────────────────────────────────────────────────────────
     if "内存" in text_lower or "memory" in text_lower:
         # 区分"查看内存概况"和"找出占用最多的"
@@ -751,7 +728,7 @@ def pre_check_task(state: AgentState) -> Dict[str, Any]:
         }
 
     privilege_context = get_privilege_context(os_type)
-    if task.get("intent") in {"create_user", "delete_user", "set_login_shell", "delete_path", "ensure_home_directory", "write_file", "set_permissions", "configure_sudo"}:
+    if task.get("intent") in {"create_user", "delete_user", "ensure_home_directory", "write_file", "set_permissions", "configure_sudo"}:
         if not privilege_context.get("is_root") and not privilege_context.get("passwordless_sudo"):
             result_text = "Privilege escalation required for this task, but passwordless sudo is unavailable."
             task_sequence_copy = list(task_sequence)
@@ -929,16 +906,6 @@ def generate_command(state: AgentState) -> Dict[str, Any]:
             command = f'net user {_safe_arg(username, os_type)} /delete'
         else:
             command = f"userdel {_safe_arg(username, os_type)}"
-            if params.get("remove_home"):
-                command = f"userdel -r {_safe_arg(username, os_type)}"
-    elif intent == "set_login_shell":
-        username = params.get("username", "")
-        shell = params.get("shell", "/sbin/nologin")
-        command = f"usermod -s {_safe_arg(shell, os_type)} {_safe_arg(username, os_type)}"
-    elif intent == "delete_path":
-        path = params.get("path", "")
-        recursive = params.get("recursive", True)
-        command = f"rm -rf {_safe_arg(path, os_type)}" if recursive else f"rm -f {_safe_arg(path, os_type)}"
     elif intent == "ensure_home_directory":
         path = params.get("path", "")
         owner = params.get("owner", "")
@@ -1176,10 +1143,6 @@ def execute_command(state: AgentState) -> Dict[str, Any]:
                 if verify_res:
                     result_text += f"\n[验证] {verify_res.message}\n"
                     contract = ExecutionVerifier.REGISTRY.get(intent, {})
-                    if not success and verify_res.passed and contract.get("expect") != "nonzero":
-                        task_status = "completed"
-                        success = True
-                        result_text += "Operation reached the expected state after verification.\n"
                     expect_nonzero = contract.get("expect") == "nonzero"
 
                     if not success and expect_nonzero and verify_res.passed:

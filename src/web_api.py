@@ -2,9 +2,6 @@ import os
 import sys
 import time
 import json
-import platform
-import subprocess
-import re as _re
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -15,7 +12,10 @@ from typing import Optional, Dict, Any, List
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.agent_workflow import build_workflow, _save_session, _load_session
+from src.agent_service import AgentService
+from src.realtime_env import collect_realtime_env
+from src.session_store import SESSION_DIR
+from src.web_models import AgentResponse, ConfirmRequest, UserRequest
 from tools.audit_logger import AuditLogger
 from config.config import CORS_ALLOWED_ORIGINS, ALLOW_ALL_CORS
 
@@ -38,7 +38,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-workflow = build_workflow()
+agent_service = AgentService()
+workflow = agent_service.workflow
+_load_session = agent_service.load_session
+_save_session = agent_service.save_session
 
 
 # ── 数据模型 ─────────────────────────────────────────────────────────────────
@@ -102,6 +105,7 @@ async def get_realtime_env():
     快速获取实时系统信息。
     直接读取 /proc 文件系统和少量系统命令，不经过 LLM，通常 <1s 完成。
     """
+    return collect_realtime_env()
     info: Dict[str, Any] = {
         "hostname": platform.node(),
         "platform": platform.system(),
@@ -1064,26 +1068,13 @@ async def health_check():
 @app.post("/api/query", response_model=AgentResponse)
 async def query(request: UserRequest):
     try:
-        session_id = request.session_id or f"session_{int(time.time())}"
-
-        saved = _load_session(session_id)
-        history = saved.get("conversation_history", [])
-        env = saved.get("environment", {})
-
-        initial_state = {
-            "session_id": session_id,
-            "user_input": request.input,
-            "conversation_history": history,
-            "environment": env,
-        }
-
-        result = workflow.invoke(initial_state)
+        execution = agent_service.run_query(user_input=request.input, session_id=request.session_id)
+        session_id = execution["session_id"]
+        result = execution["result"]
 
         # 保存 user_input 以便 /api/confirm 恢复状态时使用
-        result["user_input"] = request.input
 
         if result.get("risk_assessment", {}).get("requires_confirmation"):
-            _save_session(session_id, result)
             return AgentResponse(
                 response="",
                 execution_result="",
@@ -1101,7 +1092,6 @@ async def query(request: UserRequest):
                 explanation="",
             )
 
-        _save_session(session_id, result)
         return AgentResponse(
             response=result.get("response", ""),
             execution_result=result.get("execution_result", ""),
@@ -1184,16 +1174,13 @@ async def list_sessions():
 
 @app.delete("/api/session/{session_id}")
 async def delete_session(session_id: str):
-    from src.agent_workflow import SESSION_DIR
-    path = os.path.join(SESSION_DIR, f"{session_id}.json")
-    if os.path.exists(path):
-        os.remove(path)
+    agent_service.delete_session(session_id)
     return {"success": True}
 
 
 @app.get("/api/session/{session_id}/history")
 async def get_session_history(session_id: str):
-    saved = _load_session(session_id)
+    saved = agent_service.load_session(session_id)
     return {
         "conversation_history": saved.get("conversation_history", []),
         "environment": saved.get("environment", {}),

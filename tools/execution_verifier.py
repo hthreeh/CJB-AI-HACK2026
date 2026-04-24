@@ -73,6 +73,24 @@ class ExecutionVerifier:
             "description": "验证服务是否处于 active 状态",
             # 注意：仅对 start/restart 操作有效；stop 需要反向验证
         },
+        "ensure_home_directory": {
+            "verification_cmd": "test -d {path}",
+            "expect": "zero",
+            "on_mismatch": "fail",
+            "description": "Verify the target directory exists",
+        },
+        "write_file": {
+            "verification_cmd": "test -f {path}",
+            "expect": "zero",
+            "on_mismatch": "fail",
+            "description": "Verify the target file exists",
+        },
+        "set_permissions": {
+            "verification_cmd": "test \"$(stat -c '%a' {path} 2>/dev/null || stat -f '%Lp' {path} 2>/dev/null)\" = \"{mode}\"",
+            "expect": "zero",
+            "on_mismatch": "fail",
+            "description": "Verify the target mode is applied",
+        },
     }
 
     @classmethod

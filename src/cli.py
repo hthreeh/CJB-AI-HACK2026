@@ -1,10 +1,9 @@
 import os
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.agent_workflow import build_workflow, _save_session, _load_session
+from src.agent_service import AgentService
 from tools.audit_logger import AuditLogger
 
 audit_logger = AuditLogger()
@@ -12,9 +11,9 @@ audit_logger = AuditLogger()
 
 class CLI:
     def __init__(self):
-        self.workflow = build_workflow()
+        self.agent_service = AgentService()
         self.conversation_history = []
-        self.session_id = f"session_{int(time.time())}"
+        self.session_id = AgentService.new_session_id()
         self.pending_input = None
 
     def run(self):
@@ -59,16 +58,12 @@ class CLI:
                 continue
 
             try:
-                initial_state = {
-                    "session_id": self.session_id,
-                    "user_input": user_input,
-                    "conversation_history": list(self.conversation_history),
-                }
-
-                result = self.workflow.invoke(initial_state)
+                execution = self.agent_service.run_query(user_input=user_input, session_id=self.session_id)
+                self.session_id = execution["session_id"]
+                result = execution["result"]
 
                 if result.get("requires_confirmation") or result.get("risk_assessment", {}).get("requires_confirmation"):
-                    _save_session(self.session_id, result)
+                    self.conversation_history = result.get("conversation_history", self.conversation_history)
                     self._handle_confirmation(user_input, result)
                     continue
 
@@ -79,7 +74,6 @@ class CLI:
                 print(response)
                 print("=" * 50)
 
-                _save_session(self.session_id, result)
 
             except Exception as e:
                 print(f"\n错误: {str(e)}")
@@ -108,35 +102,19 @@ class CLI:
         confirmation = input("\n是否确认执行此操作? (y/n): ").strip().lower()
 
         if confirmation == 'y':
-            result = self.workflow.invoke({
-                "session_id": self.session_id,
-                "user_input": user_input,
-                "conversation_history": list(self.conversation_history),
-                "user_confirmation": True,
-                "command": result.get("command", ""),
-                "task_sequence": result.get("task_sequence", []),
-                "current_task_index": result.get("current_task_index", 0),
-                "task_status": result.get("task_status", "in_progress"),
-                "environment": result.get("environment", {}),
-                "risk_assessment": {**risk_info, "requires_confirmation": False},
-                "risk_level": risk_info.get("risk_level", "medium"),
-                "risk_explanation": risk_info.get("risk_explanation", ""),
-            })
+            execution = self.agent_service.run_confirmation(
+                session_id=self.session_id,
+                confirmed=True,
+                user_input=user_input,
+            )
         else:
-            result = self.workflow.invoke({
-                "session_id": self.session_id,
-                "user_input": user_input,
-                "conversation_history": list(self.conversation_history),
-                "user_confirmation": False,
-                "command": result.get("command", ""),
-                "task_sequence": result.get("task_sequence", []),
-                "current_task_index": result.get("current_task_index", 0),
-                "task_status": result.get("task_status", "in_progress"),
-                "environment": result.get("environment", {}),
-                "risk_assessment": risk_info,
-                "risk_level": risk_info.get("risk_level", "medium"),
-                "risk_explanation": risk_info.get("risk_explanation", ""),
-            })
+            execution = self.agent_service.run_confirmation(
+                session_id=self.session_id,
+                confirmed=False,
+                user_input=user_input,
+            )
+
+        result = execution["result"]
 
         self.conversation_history = result.get("conversation_history", self.conversation_history)
 
@@ -144,7 +122,6 @@ class CLI:
         print(result.get("response", result.get("execution_result", "")))
         print("=" * 50)
 
-        _save_session(self.session_id, result)
 
     def show_history(self):
         sessions = audit_logger.get_session_history(self.session_id)
