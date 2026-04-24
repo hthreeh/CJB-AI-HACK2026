@@ -25,5 +25,4 @@ __pycache__/
 .pytest_cache/
 
 # Sessions (debug logs)
-sessions/session_*
-sessions/ses_*
+sessions/

@@ -24,6 +24,9 @@ CORS_ALLOWED_ORIGINS = [
 ]
 ALLOW_ALL_CORS = _get_bool_env("ALLOW_ALL_CORS", False)
 
+WEB_USERNAME = os.getenv("WEB_USERNAME", "admin")
+WEB_PASSWORD = os.getenv("WEB_PASSWORD", "123456")
+
 # ── 功能开关 ─────────────────────────────────────────────────
 # 允许原始 shell 命令兜底（存在安全风险，默认关闭）
 ALLOW_RAW_SHELL_FALLBACK = _get_bool_env("ALLOW_RAW_SHELL_FALLBACK", False)

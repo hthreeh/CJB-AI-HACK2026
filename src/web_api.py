@@ -17,7 +17,7 @@ from src.realtime_env import collect_realtime_env
 from src.session_store import SESSION_DIR
 from src.web_models import AgentResponse, ConfirmRequest, UserRequest
 from tools.audit_logger import AuditLogger
-from config.config import CORS_ALLOWED_ORIGINS, ALLOW_ALL_CORS
+from config.config import CORS_ALLOWED_ORIGINS, ALLOW_ALL_CORS, WEB_USERNAME, WEB_PASSWORD
 
 audit_logger = AuditLogger()
 
@@ -50,6 +50,10 @@ class UserRequest(BaseModel):
     input: str
     session_id: Optional[str] = None
 
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 class ConfirmRequest(BaseModel):
     session_id: str
@@ -460,6 +464,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 ::-webkit-scrollbar-thumb:hover{background:var(--border-h)}
 
+/* Login Overlay */
+.login-overlay { position: fixed; inset: 0; background: var(--bg-0); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+.login-box { background: var(--bg-1); border: 1px solid var(--border); padding: 40px; border-radius: 12px; width: 360px; box-shadow: var(--shadow); text-align: center; }
+.login-box h2 { font-size: 20px; font-weight: 600; margin-bottom: 24px; color: var(--t1); background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.login-input { width: 100%; border: 1px solid var(--border); background: var(--bg-0); color: var(--t1); padding: 12px 14px; border-radius: 8px; margin-bottom: 16px; outline: none; font-size: 14px; }
+.login-input:focus { border-color: var(--blue-d); }
+.login-btn { width: 100%; background: var(--blue-d); color: #fff; padding: 12px; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+.login-btn:hover { background: var(--blue); }
+.login-error { color: var(--red); font-size: 13px; margin-top: 12px; display: none; }
+
 /* animations */
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}}
@@ -471,7 +485,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',sans
 </style>
 </head>
 <body>
-<div class="layout">
+<div id="loginOverlay" class="login-overlay">
+  <div class="login-box">
+    <h2>OS Agent 登录</h2>
+    <input type="text" id="loginUser" class="login-input" placeholder="用户名" />
+    <input type="password" id="loginPass" class="login-input" placeholder="密码" onkeydown="if(event.key==='Enter') doLogin()" />
+    <button class="login-btn" onclick="doLogin()">登 录</button>
+    <div id="loginError" class="login-error"></div>
+  </div>
+</div>
+
+<div class="layout" id="mainLayout" style="display:none; opacity:0; transition: opacity 0.5s;">
 
 <!-- ── Sidebar ── -->
 <aside class="sidebar">
@@ -1039,13 +1063,58 @@ function renderEnv(d){
 }
 
 // ── 启动 ──────────────────────────────────────────────────────────────────
-(async function init(){
+window.doLogin = async function() {
+  var u = document.getElementById('loginUser').value.trim();
+  var p = document.getElementById('loginPass').value.trim();
+  var err = document.getElementById('loginError');
+  if(!u || !p) { err.textContent = "请输入用户名和密码"; err.style.display = 'block'; return; }
+  try {
+    var r = await fetch('/api/login', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username: u, password: p})
+    });
+    if(r.ok) {
+      localStorage.setItem('osa_auth_token', 'ok');
+      document.getElementById('loginOverlay').style.display = 'none';
+      var ml = document.getElementById('mainLayout');
+      ml.style.display = 'flex';
+      setTimeout(function(){ ml.style.opacity = '1'; }, 50);
+      initApp();
+    } else {
+      var d = await r.json();
+      err.textContent = d.detail || "认证失败";
+      err.style.display = 'block';
+    }
+  } catch(e) {
+    err.textContent = "网络错误，请稍后重试";
+    err.style.display = 'block';
+  }
+};
+
+async function initApp() {
   var saved=getSes(sesId);
   if(!saved)saveSes(sesId,{title:'新对话',lastAt:Date.now()/1000});
   await loadSessions();
   loadEnv();
   setInterval(loadEnv,300000);  // 每5分钟自动刷新
   document.getElementById('inp').focus();
+}
+
+(async function init(){
+  if(localStorage.getItem('osa_auth_token') === 'ok') {
+    document.getElementById('loginOverlay').style.display = 'none';
+    var ml = document.getElementById('mainLayout');
+    ml.style.display = 'flex';
+    ml.style.opacity = '1';
+    initApp();
+  }
+  // 否则拦截在登录页，等待 doLogin
+
+  var saved=getSes(sesId);
+  if(!saved)saveSes(sesId,{title:'新对话',lastAt:Date.now()/1000});
+  await loadSessions();
+  loadEnv();
+  setInterval(loadEnv,300000);  // 每5分钟自动刷新
 })();
 
 })();
@@ -1055,6 +1124,12 @@ function renderEnv(d){
 
 
 # ── API 端点 ──────────────────────────────────────────────────────────────────
+
+@app.post("/api/login")
+async def login(req: LoginRequest):
+    if req.username == WEB_USERNAME and req.password == WEB_PASSWORD:
+        return {"success": True, "token": "os_agent_auth_ok"}
+    raise HTTPException(status_code=401, detail="用户名或密码错误")
 
 @app.get("/api/health")
 async def health_check():
