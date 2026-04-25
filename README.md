@@ -1,170 +1,97 @@
-# 操作系统智能代理
+# OS Agent 🤖 — 操作系统智能管理代理
 
-基于LangGraph架构的操作系统智能代理，通过自然语言交互实现Linux服务器的智能管理。
+基于 **LangGraph** 和大语言模型（LLM）驱动的 AI-Native 操作系统智能代理。该项目旨在探索“去命令行化”的新一代服务器交互范式，允许用户通过自然语言完成从基础设施监控、故障排查到高危拦截的复杂服务器管理工作。
 
-## 项目亮点
+---
 
-- 🤖 **AI驱动**: 基于大语言模型的意图理解和响应生成
-- 🛡️ **安全优先**: 多层风险控制机制，自动拦截高风险操作
-- 🔄 **连续任务**: 支持多步骤任务自动编排和执行
-- 🌍 **环境感知**: 自动识别操作系统类型并生成适配命令
-- 💬 **对话交互**: 支持多轮对话，保持上下文连贯性
-- 🌐 **Web界面**: 内置美观的Web聊天界面，支持远程访问
+## 📖 项目简介
 
-## 快速开始
+在传统的 Linux 运维中，用户需要熟记大量的 CLI 命令，并深刻理解不同 Linux 发行版（Ubuntu、CentOS、openEuler 等）之间的差异。**OS Agent** 的出现解决了“人机沟通门槛过高”的痛点：
+用户只需输入人类语言（例如：“*排查一下 80 端口无法访问的原因并在修复后重启对应服务*”），OS Agent 就会自动分析当前 OS 环境、把庞大的任务拆分为多个子链条并逐一去底层执行，最后通过人类语言向您报告排查结果。
 
-### 本地运行
+我们不仅是一个命令转发器，还是一个具有**多轮上下文记忆**、**双重风险管控**以及**后置状态校验**的生产级运维虚拟人。
 
-```bash
-# 安装依赖
-pip install -r requirements.txt
+---
 
-# 配置API密钥
-cp .env.example .env
-# 编辑.env文件，填入OpenAI API密钥
+## 🏗️ 架构设计与实现方式
 
-# 启动CLI
-python -m src.main
+### 核心架构图 (Architecture)
 
-# 启动Web服务
-python -m src.main web
+本系统全面采用图数据流驱动机制，抛弃了传统的“提示词硬拼凑”流水线，以实现高鲁棒性的智能体协作。
 
-# 指定地址和端口
-python -m src.main web --host 0.0.0.0 --port 8000
+```mermaid
+graph TD
+    User([用户自然语言]) --> |HTTP/WebSocket| API[FastAPI 网关层]
+    API --> Env[环境嗅探模块]
+    Env --> State[(State 状态上下文记录)]
+    
+    subgraph LangGraph AI 工作流
+        State --> Intent[大模型意图分析 & 槽位继承]
+        Intent --> Decomposer[复杂任务拆解决策]
+        Decomposer --> RuleCheck[硬编码底层拦截规则库]
+        RuleCheck --> Risk[LLM 动态风险评估]
+    end
+    
+    subgraph 操作验证闭环
+        Risk -.高危拦截.-> API
+        Risk --> |安全通过| Executor[任务沙盒执行器]
+        Executor --> Verifier[系统后置校验 Post-Validation]
+    end
+    
+    Verifier --> Explainer[操作可解释性引擎 Explainability]
+    Explainer --> |转化自然语言结果| API
+    
+    Executor <==> OS[Linux / OS 底层环境]
 ```
 
-### 部署到Ubuntu虚拟机
+### 为什么选择 LangGraph 架构？（核心优势）
 
-```bash
-# 上传项目到虚拟机
-scp -r langgraph_os_agent/ user@<IP>:/home/user/
+OS Agent 强依赖于 **LangGraph** 状态机模型，而非普通的 LangChain Agent 或纯 prompt 工程。这带来了显著的工业级优势：
 
-# 在虚拟机中运行部署脚本
-ssh user@<IP>
-cd langgraph_os_agent
-chmod +x deploy.sh
-./deploy.sh
+1. **图灵完备的执行循环 (Cyclic Logic)**：普通的 Agent 是单向推理，如果遇到报错很容易崩溃；而在 LangGraph 中，我们在执行错误时可以通过图的 "Edges" 逻辑无缝回到重组阶段（Retry Loop），让系统产生“自我反思”和“错误治愈”能力。
+2. **多轮记忆的严格继承 (Stateful Context)**：在 LangGraph 中，状态 (`State`) 随着执行流流转，能精准保留您的每一轮对话、每一个历史目录，甚至记录哪些风险刚得到了人工授权，保证极高的上下文准确度。
+3. **安全拦截检查点 (Human-in-the-loop / Checkpoint)**：通过 LangGraph 特有的中断运行机制，我们完美实现了高危指令（如 `rm -rf`）挂起。只有当用户在 GUI 上明确点击“确认执行”后，大图节点才接着继续推进，杜绝意外越权。
+4. **多任务并行与串行编排**：面对极其复杂的自然语言，Agent 能将其分解成一条 `TaskSequence` 任务链依次在图中流转执行。
 
-# 启动服务
-source venv/bin/activate
-python -m src.main web --host 0.0.0.0 --port 8000
-```
+---
 
-## 使用示例
+## ✨ 核心特性
 
-### 基础功能
-- "查询磁盘使用情况"
-- "查看系统信息"
-- "查看当前运行的进程"
-- "查看开放的端口"
+- **🛡️ 生产级双规风控**：前置“硬编码正则规则库（防逃逸）” + 后置“大模型动态语义风险评估（防社工越权）”。
+- **🔍 操作验证闭环 (Post-validation)**：发出的操作不仅看退出码，项目还自建了探针，强校验操作是否符合客观物理状态（如创建用户后验证 `/home` 是否构建成功等）。
+- **🌈 可解释性引擎**：拒绝只会打印一坨 log 的机器人形式。每次产生风险分析与错误时，都会用自然语言向用户呈现其后果、推导依据，透明可靠。
+- **🌍 环境自适应嗅探**：通过 `EnvironmentTools` 后台动态判定服务器架构底层是 Debian 系 还是 RedHat 系，从而为模型挂载准确的依赖。
 
-### 文件搜索
-- "搜索 /etc 目录下的所有 .conf 文件"
-- "查找 /home 目录中的 .txt 文件"
+---
 
-### 用户管理
-- "创建一个名为 testuser 的用户"
-- "删除用户 testuser"
+## 🛠️ 运行环境与依赖 (Tech Stack)
 
-### 连续任务
-- "先查看磁盘使用情况，然后查看进程状态"
-- "查看系统信息，然后查看磁盘使用情况，最后查看端口状态"
+### 环境要求
+- **操作系统**：支持 Linux (Ubuntu, openEuler, CentOS, Rocky) 与 Windows（可作为中控端连接测试）
+- **Python 版本**：Python 3.10 及以上
+- **包管理器**：pip & venv
 
-### 安全测试
-- "删除 /etc 目录" （将被拦截）
-- "格式化磁盘" （将被拦截）
+### 核心依赖栈
+- **AI 智能调度**：`langgraph` / `langchain` / `langchain-openai`
+- **语言模型**：Minimax API / OpenAI API (可配置)
+- **后端服务**：`FastAPI` / `uvicorn` (含高并发 WebSocket)
+- **前端交互**：纯净无依赖 HTML5 + Vanilla JS / `marked.js`
+- **本地审计存储**：`sqlite3`
 
-## 项目结构
+> 完整项目清单请参见 `requirements.txt`。
 
-```
-langgraph_os_agent/
-├── config/              # 配置文件
-│   └── config.py        # 系统和安全配置
-├── src/                 # 核心源代码
-│   ├── agent_workflow.py  # LangGraph工作流定义
-│   ├── cli.py           # 命令行界面
-│   ├── main.py          # 入口程序
-│   └── web_api.py       # Web API服务
-├── tools/               # 工具模块
-│   ├── system_tools.py      # 系统管理工具
-│   ├── security_tools.py    # 安全控制工具
-│   ├── environment_tools.py # 环境感知工具
-│   ├── state_management.py  # 状态管理工具
-│   └── ssh_tools.py         # SSH远程连接工具
-├── tests/               # 测试文件
-├── .env                 # 环境变量配置
-├── .env.example         # 环境变量示例
-├── requirements.txt     # Python依赖
-├── deploy.sh            # Ubuntu部署脚本
-└── start.bat            # Windows快速启动
-```
+---
 
-## 架构设计
+## 🚀 部署与使用
 
-### LangGraph工作流
+为了让本系统顺利进驻物理局域网、云服务器的不同操作系统发行版，我们编写了非常详尽的分支平台部署说明，并配备了带色彩与环境自愈功能的自动化脚本。
 
-```
-环境检测 → 状态决策 → 意图识别 → 命令生成 → 风险确认 → 命令执行 → 任务检查 → 响应生成
-```
+🔗 **[>>> 请点击此处阅读 《OS-AGENT 部署与启动文档 (DEPLOY.md)》 <<<](./DEPLOY.md)**
 
-### 核心模块
+---
 
-1. **环境检测模块**: 自动识别操作系统类型和环境信息
-2. **状态管理模块**: 跟踪系统状态、任务历史和安全事件
-3. **意图识别模块**: 使用LLM解析用户意图和提取参数
-4. **命令生成模块**: 根据环境和意图生成适配的系统命令
-5. **安全控制模块**: 多层风险评估，自动拦截危险操作
-6. **任务执行模块**: 带重试机制的命令执行
-7. **响应生成模块**: 生成自然语言反馈
+## 📜 许可证 (License)
 
-### 安全机制
+本项目开源节流规则遵循 **MIT License**。
 
-- **高风险命令拦截**: 自动识别并阻止危险命令
-- **中等风险确认**: 需要用户二次确认
-- **风险评估依据**: 提供详细的风险分析说明
-- **操作审计**: 记录所有操作和安全事件
-
-## API文档
-
-启动Web服务后访问 `http://localhost:8000/docs` 查看完整API文档。
-
-### 主要接口
-
-- `POST /api/query` - 发送自然语言请求
-- `POST /api/confirm` - 确认高风险操作
-- `GET /api/health` - 健康检查
-- `GET /api/sessions` - 查看活跃会话
-
-## 技术栈
-
-- **核心框架**: LangGraph
-- **语言模型**: OpenAI API
-- **Web框架**: FastAPI
-- **系统交互**: subprocess
-- **SSH连接**: paramiko
-
-## 演示视频录制指南
-
-### 推荐演示顺序
-
-1. **基础功能** (1-2分钟)
-   - 查询磁盘使用情况
-   - 查看系统信息
-   - 查看进程状态
-
-2. **高级功能** (1-2分钟)
-   - 文件搜索
-   - 连续任务执行
-
-3. **安全特性** (1分钟)
-   - 尝试高风险操作（演示拦截）
-
-### 录制建议
-
-- 使用分屏显示：左侧Web界面，右侧终端
-- 展示完整交互过程
-- 突出风险提示和确认流程
-
-## 许可证
-
-MIT License
+欢迎探讨基于操作系统的代理自动化交互的更多无限可能。
