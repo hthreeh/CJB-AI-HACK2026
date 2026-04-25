@@ -280,11 +280,12 @@ class AuditLogger:
         conn = self._get_conn()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT DISTINCT session_id,
+            SELECT session_id,
                    COUNT(*) as interaction_count,
                    MAX(timestamp) as last_activity,
-                   MIN(timestamp) as created_at
-            FROM audit_log
+                   MIN(timestamp) as created_at,
+                   (SELECT user_input FROM audit_log a2 WHERE a2.session_id = a1.session_id ORDER BY timestamp ASC LIMIT 1) as title
+            FROM audit_log a1
             GROUP BY session_id
             ORDER BY last_activity DESC
             LIMIT ?

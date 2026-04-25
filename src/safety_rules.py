@@ -31,12 +31,20 @@ MALICIOUS_KEYWORDS = [
     ":(){ :|:& };:", "fork bomb", "提权", "删库跑路", "drop table", "drop database"
 ]
 
-# 5. 严重安全防护破坏 (Security bypassing)
+# 5. 严重安全防护破坏 (Security bypassing/Tampering configs)
 SECURITY_BYPASS_KEYWORDS = [
     "禁用防火墙", "关闭防火墙", "停止防火墙", "清空防火墙", 
     "iptables -F", "iptables --flush", "ufw disable", "systemctl stop firewalld", "systemctl disable firewalld",
     "关闭selinux", "setenforce 0", 
-    "开放所有端口", "清空安全组"
+    "开放所有端口", "清空安全组",
+    "修改sshd_config", "允许root空密码", "清空被控端密钥", "删除/etc/passwd", "删除/etc/shadow"
+]
+
+# 6. 大范围的用户权限与越权变更 (Broad privilege escalation)
+PRIVILEGE_ESCALATION_KEYWORDS = [
+    "给所有人最高权限", "把所有人设为root", "将所有人加入root组", "清空所有用户密码", "删除管理员密码",
+    "chmod -R 777 /", "chmod 777 -R /", "chmod -R 777 /etc", "chmod -R 777 /usr",
+    "chown -R nobody", "chown -R root /", "visudo免密", "配置sudo无密码"
 ]
 
 ALL_DANGEROUS_PATTERNS = (
@@ -44,7 +52,8 @@ ALL_DANGEROUS_PATTERNS = (
     DESTRUCTIVE_FILE_KEYWORDS + 
     DEK_FORMAT_KEYWORDS + 
     MALICIOUS_KEYWORDS + 
-    SECURITY_BYPASS_KEYWORDS
+    SECURITY_BYPASS_KEYWORDS +
+    PRIVILEGE_ESCALATION_KEYWORDS
 )
 
 def matches_high_risk_intent(user_input: str) -> tuple:

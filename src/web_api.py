@@ -671,20 +671,29 @@ function getSes(id){
   try{var r=localStorage.getItem('osa_'+id);return r?JSON.parse(r):null}catch(e){return null}
 }
 function delSesLocal(id){try{localStorage.removeItem('osa_'+id)}catch(e){}}
-function getSesTitle(id){var s=getSes(id);return(s&&s.title)?s.title:'新对话'}
+function getSesTitle(id){
+  var s=getSes(id);
+  if(s&&s.title&&s.title!=='新对话') return s.title;
+  var fromArr=allSes.find(function(x){return x.id===id});
+  if(fromArr&&fromArr.title) {
+     var t=fromArr.title;
+     return t.length>28?t.slice(0,28)+'…':t;
+  }
+  return '新对话';
+}
 
 // ── 加载会话列表 ──────────────────────────────────────────────────────────
 async function loadSessions(){
   try{
     var r=await fetch('/api/sessions');
     var d=await r.json();
-    var svr=(d.sessions||[]).map(function(s){return{id:s.session_id,ts:s.last_activity||0}});
+    var svr=(d.sessions||[]).map(function(s){return{id:s.session_id,ts:s.last_activity||0,title:s.title}});
     var map={};svr.forEach(function(s){map[s.id]=s});
 
     // 合并本地
     Object.keys(localStorage).filter(function(k){return k.startsWith('osa_ses_')||k.startsWith('osa_')&&k!=='osa_sid'}).forEach(function(k){
       var id=k.replace(/^osa_/,'');
-      if(id&&!map[id]){var s=getSes(id);if(s)map[id]={id:id,ts:s.lastAt||0}}
+      if(id){var s=getSes(id);if(s){ if(!map[id]) map[id]={id:id,ts:s.lastAt||0}; if(s.title&&s.title!=='新对话') map[id].title=s.title; }}
     });
 
     allSes=Object.values(map).sort(function(a,b){return b.ts-a.ts});
